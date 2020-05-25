@@ -1,0 +1,65 @@
+Description: >
+    Anders Kensby / Udacity 2020
+    Project-CloudFormation
+    Deploy a high-available web app using CloudFormation
+
+Parameters:
+
+    EnvironmentName:
+        Description: An environment name that will be prefixed to resource names
+        Type: String
+
+Resources:
+    ProfileWithRolesForOurApp:
+        Type: AWS::IAM::InstanceProfile
+        Properties: 
+            Roles:
+              - Jenkins
+    JenkinsSecGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+            GroupDescription: Allow ssh and 8080 to instance
+            VpcId:
+                Fn::ImportValue:
+                    !Sub "${EnvironmentName}-VPCID"
+            SecurityGroupIngress:
+              - IpProtocol: tcp
+                FromPort: 22
+                ToPort: 22
+                CidrIp: 194.103.240.26/32
+              - IpProtocol: tcp
+                FromPort: 8080
+                ToPort: 8080
+                CidrIp: 194.103.240.26/32
+            SecurityGroupEgress:
+              - IpProtocol: tcp
+                FromPort: 0
+                ToPort: 65535
+                CidrIp: 0.0.0.0/0
+    Jenkins:
+        Type: AWS::EC2::Instance
+        Properties: 
+            ImageId: "ami-050981837962d44ac"
+            InstanceType: t3.small
+            KeyName: "ec2-stockholm"
+            IamInstanceProfile:
+              Ref: ProfileWithRolesForOurApp
+            SubnetId:
+              Fn::ImportValue: !Sub "${EnvironmentName}-PUB1-SN"
+            SecurityGroupIds:
+              - Ref: JenkinsSecGroup
+            UserData:
+              Fn::Base64: !Sub |
+                #!/bin/bash
+                apt-get update -y
+                apt install -y default-jdk
+                apt install -y tidy
+                apt install -y docker.io
+                wget -q -O - https://pkg.jenkins.io/debian/jenkins-ci.org.key | sudo apt-key add -
+                sh -c 'echo deb https://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'
+                apt-get update -y
+                apt-get install -y jenkins
+                usermod -aG docker jenkins
+                systemctl start jenkins
+                systemctl enable jenkins
+                systemctl status jenkins
